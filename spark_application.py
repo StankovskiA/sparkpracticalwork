@@ -7,6 +7,8 @@ from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
 from pyspark.ml import Pipeline
+from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
+from pyspark.ml.regression import GBTRegressor
 
 def clean_data(df):
     '''
@@ -149,7 +151,7 @@ def process_datetimes(df_encoded):
             return 'Evening'
         else:
             return 'Night'
-          
+
     part_of_day_udf = udf(get_part_of_day, StringType())
 
     # Now, let's recast the DepTime column to IntegerType to handle cases where it's not an integer.
@@ -277,35 +279,55 @@ def split_data(df_encoded):
 
     return train_data, test_data
 
-def fit_model(train_data):
+def fit_model(model, train_data):
     '''
     Fit the model to the training data
     '''
-    # Initialize the regression model
-    rf = RandomForestRegressor(featuresCol="features", labelCol="label", maxBins=250)
+    # Initialize the model
+    mod = model(featuresCol="features", labelCol="label", maxBins=250)
 
     # Train the model
-    rf_model = rf.fit(train_data)
+    mod_model = mod.fit(train_data)
 
-    return rf_model
+    return mod, mod_model
 
-def predict_eval(model, test_data, save_model=True):
+def predict_eval(model, test_data, evaluatorModel):
     # Make predictions on the test data
     predictions = model.transform(test_data)
     
+    performance_metrics = ['rmse', 'mae', 'mse', 'r2']
+    
     # Evaluate the model
-    def eval_model(metrics):
+    def eval_model(evalModel, predictions, metrics=performance_metrics):
         for m in metrics:
-            evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction", metricName=m)
+            evaluator = evalModel(labelCol="label", predictionCol="prediction", metricName=m)
             metric = evaluator.evaluate(predictions)
             print(f" {m} on test data: {metric}")
 
-    performance_metrics = ['rmse', 'mae', 'mse', 'r2']
-    eval_model(performance_metrics)
+    eval_model(evaluatorModel, predictions)
 
-    if save_model:
-        # Save the trained model for later use
-        model.write().overwrite().save("model")
+def tune_model(mod, train_data):
+    '''
+    Fit the model to the training data and perform hyperparameter tuning
+    '''
+    # Define hyperparameter grid
+    mod_paramGrid = ParamGridBuilder() \
+        .addGrid(mod.numTrees, [10, 15, 20]) \
+        .addGrid(mod.maxDepth, [5, 8, 12]) \
+        .addGrid(mod.maxBins, [250, 300, 350]) \
+        .build()
+
+    # Define CrossValidator
+    crossval_mod = CrossValidator(estimator=mod,
+                                estimatorParamMaps=mod_paramGrid,
+                                evaluator=RegressionEvaluator(labelCol="label", predictionCol="prediction", metricName="rmse"),
+                                numFolds=3)
+
+    # Fit the model using CrossValidator
+    cv_mod_model = crossval_mod.fit(train_data)
+    mod_best_model = cv_mod_model.bestModel
+
+    return mod_best_model
 
 def main():
     # Create a Spark session
@@ -356,8 +378,17 @@ def main():
     print("Begin Model Training and Evaluation")
     train_data, test_data = split_data(df_encoded)
     
-    model = fit_model(train_data)
-    predict_eval(model, test_data)
+    # Random Forest Regressor model training and evaluation
+    rf, rf_model = fit_model(RandomForestRegressor, train_data)
+    predict_eval(rf_model, test_data)
+    
+    # Random Forest Regressor model tuning
+    tuned_rf = tune_model(rf, train_data)
+    predict_eval(tuned_rf, test_data)
+    
+    # Gradient Boosted Tree Regressor model training and evaluation
+    _, gbt_model = tune_model(GBTRegressor, train_data)
+    predict_eval(gbt_model, test_data)
     
     # Finish Session
     spark.stop()
