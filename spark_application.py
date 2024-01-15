@@ -286,7 +286,10 @@ def fit_model(model, train_data):
     Fit the model to the training data
     '''
     # Initialize the model
-    mod = model(featuresCol="features", labelCol="label", maxBins=250)
+    if model == 'rf':
+        mod = RandomForestRegressor(featuresCol="features", labelCol="label", maxBins=250)
+    elif model == 'gbt':
+        mod = GBTRegressor(featuresCol="features", labelCol="label", maxBins=250)
 
     # Train the model
     mod_model = mod.fit(train_data)
@@ -302,7 +305,10 @@ def predict_eval(model, test_data, evaluatorModel):
     # Evaluate the model
     def eval_model(evalModel, predictions, metrics=performance_metrics):
         for m in metrics:
-            evaluator = evalModel(labelCol="label", predictionCol="prediction", metricName=m)
+            if evalModel == 'rf':
+                evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction", metricName=m)
+            elif evalModel == 'gbt':
+                evaluator = RegressionEvaluator(labelCol="label", predictionCol="prediction", metricName=m)
             metric = evaluator.evaluate(predictions)
             print(f" {m} on test data: {metric}")
 
@@ -383,22 +389,22 @@ def main():
     
     # Random Forest Regressor model training and evaluation
     print("RandomForestRegressor")
-    rf, rf_model = fit_model(RandomForestRegressor, train_data)
-    predict_eval(rf_model, test_data)
+    rf, rf_model = fit_model('rf', train_data)
+    predict_eval(rf_model, test_data, 'rf')
     
     try:
         # Random Forest Regressor model tuning
         print("\nHyperparameter tuning and Cross Validation")
         tuned_rf = tune_model(rf, train_data)
-        predict_eval(tuned_rf, test_data)
+        predict_eval(tuned_rf, test_data, 'rf')
     except Py4JJavaError as e:
         print("\nAn error occurred during model tunting:", e)
         print("\nThis may be due to hardware limitations such as insufficient memory.\n")
     
     # Gradient Boosted Tree Regressor model training and evaluation
     print("GBTRegressor")
-    _, gbt_model = fit_model(GBTRegressor, train_data)
-    predict_eval(gbt_model, test_data)
+    _, gbt_model = fit_model('gbt', train_data)
+    predict_eval(gbt_model, test_data, 'gbt')
     
     # Finish Session
     spark.stop()
