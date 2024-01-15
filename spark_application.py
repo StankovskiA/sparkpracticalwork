@@ -392,14 +392,14 @@ def main():
     rf, rf_model = fit_model('rf', train_data)
     predict_eval(rf_model, test_data, 'rf')
     
-    try:
-        # Random Forest Regressor model tuning
-        print("\nHyperparameter tuning and Cross Validation")
-        tuned_rf = tune_model(rf, train_data)
-        predict_eval(tuned_rf, test_data, 'rf')
-    except Py4JJavaError as e:
-        print("\nAn error occurred during model tunting:", e)
-        print("\nThis may be due to hardware limitations such as insufficient memory.\n")
+    # try:
+    #     # Random Forest Regressor model tuning
+    #     print("\nHyperparameter tuning and Cross Validation")
+    #     tuned_rf = tune_model(rf, train_data)
+    #     predict_eval(tuned_rf, test_data, 'rf')
+    # except Py4JJavaError as e:
+    #     print("\nAn error occurred during model tunting:", e)
+    #     print("\nThis may be due to hardware limitations such as insufficient memory.\n")
     
     # Gradient Boosted Tree Regressor model training and evaluation
     print("GBTRegressor")
