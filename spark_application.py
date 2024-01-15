@@ -1,15 +1,17 @@
+### Import libraries ###
 from pyspark.sql.functions import col, count, when, skewness, kurtosis, udf, concat_ws
 from pyspark.sql.types import StringType, NumericType, IntegerType, DoubleType
 from pyspark.ml.feature import StringIndexer, OneHotEncoder
-from pyspark.ml.regression import RandomForestRegressor
+from pyspark.ml.regression import RandomForestRegressor, GBTRegressor
 from pyspark.ml.evaluation import RegressionEvaluator
 from pyspark.ml.feature import VectorAssembler
 from pyspark.sql.window import Window
 from pyspark.sql import SparkSession
 from pyspark.ml import Pipeline
 from pyspark.ml.tuning import CrossValidator, ParamGridBuilder
-from pyspark.ml.regression import GBTRegressor
+from py4j.protocol import Py4JJavaError
 
+### Functions ###
 def clean_data(df):
     '''
     Remove columns that are not needed or useful for the analysis
@@ -329,6 +331,7 @@ def tune_model(mod, train_data):
 
     return mod_best_model
 
+### Main program ###
 def main():
     # Create a Spark session
     spark = SparkSession.builder.appName("SparkMLApp").getOrCreate()
@@ -379,19 +382,27 @@ def main():
     train_data, test_data = split_data(df_encoded)
     
     # Random Forest Regressor model training and evaluation
+    print("RandomForestRegressor")
     rf, rf_model = fit_model(RandomForestRegressor, train_data)
     predict_eval(rf_model, test_data)
     
-    # Random Forest Regressor model tuning
-    tuned_rf = tune_model(rf, train_data)
-    predict_eval(tuned_rf, test_data)
+    try:
+        # Random Forest Regressor model tuning
+        print("\nHyperparameter tuning and Cross Validation")
+        tuned_rf = tune_model(rf, train_data)
+        predict_eval(tuned_rf, test_data)
+    except Py4JJavaError as e:
+        print("\nAn error occurred during model tunting:", e)
+        print("\nThis may be due to hardware limitations such as insufficient memory.\n")
     
     # Gradient Boosted Tree Regressor model training and evaluation
-    _, gbt_model = tune_model(GBTRegressor, train_data)
+    print("GBTRegressor")
+    _, gbt_model = fit_model(GBTRegressor, train_data)
     predict_eval(gbt_model, test_data)
     
     # Finish Session
     spark.stop()
-
+    
+# --- Program --- #
 if __name__ == "__main__":
     main()
